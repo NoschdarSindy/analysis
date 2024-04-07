@@ -4,6 +4,7 @@ import plotly.graph_objs as go
 import plotly.offline as pyo
 import plotly.express as px
 from matplotlib import pyplot as plt
+import neurokit2 as nk
 import seaborn as sns
 
 
@@ -93,6 +94,13 @@ def plot_data(streams_df, markers_df, title=None, hide_end_markers=False):
     plot_gantt(markers_df)
 
 
+def plot_epoch(epoch, title=None, columns_to_plot=['ECG_Rate', 'EDA_Tonic', 'EDA_Phasic', 'pupil_diameter'], subplots=False):
+    nk.signal_plot(epoch[columns_to_plot],
+                   # can only pass title arg if not subplots
+                   **dict(title=title or epoch['Condition'].values[0]) if not subplots else {}, # Extract condition name
+                subplots=subplots, labels=columns_to_plot)
+
+
 def plot_correlation_matrix(correlation_matrix, title=None):
     mask = np.triu(np.ones_like(correlation_matrix, dtype=bool))
     correlation_matrix = correlation_matrix.mask(mask)
@@ -100,6 +108,6 @@ def plot_correlation_matrix(correlation_matrix, title=None):
     sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
     plt.title(title)
     plt.show()
-    # fig = px.imshow(correlation_matrix, color_continuous_scale='RdBu', text_auto='.2f')
-    # fig.update_layout(title=title, title_x=0.5, height=1000)
-    # fig.show()
+
+samples_to_seconds = lambda samples, sampling_rate: samples / sampling_rate
+seconds_to_samples = lambda seconds, sampling_rate: int(seconds * sampling_rate)
