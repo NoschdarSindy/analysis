@@ -1,9 +1,9 @@
 ,age,gender,country,education,profession,englishSpeakingFrequency,englishUnderstandingFrequency,englishProficiency,iuipc
-1,28,Female,Germany,"Secondary education (Realschule, Gymnasium)",Student,A few times a month,Every day,Upper-Intermediate (B2),37
-2,31,Male,Iraq,Bachelor's degree,Manager in the catering industry,Every day,Every day,Native Speaker (C2),67
-3,41,Male,Iraq,Master's degree,Program Lead,Every day,Every day,Advanced (C1),55
-4,33,Female,Iraq,Master's degree,housewife,A few times a month,A few times a year,Advanced (C1),55
-5,37,Male,Iraq,Master's degree,Social worker,Every day,Every day,Advanced (C1),70
-6,40,Female,Iraq,Master's degree,Lecturer,A few times a week,Every day,Advanced (C1),66
-7,38,Female,Iraq,Master's degree,Interpreter,A few times a week,A few times a week,Advanced (C1),70
-8,37,Male,Iraq,Bachelor's degree,.,A few times a month,Every day,Upper-Intermediate (B2),30
+1,28,Female,Germany,"Secondary education (Realschule, Gymnasium)",Student,A few times a month,Every day,Upper-Intermediate (B2),3.7
+2,31,Male,Iraq,Bachelor's degree,Manager in the catering industry,Every day,Every day,Native Speaker (C2),6.7
+3,41,Male,Iraq,Master's degree,Program Lead,Every day,Every day,Advanced (C1),5.5
+4,33,Female,Iraq,Master's degree,housewife,A few times a month,A few times a year,Advanced (C1),5.5
+5,37,Male,Iraq,Master's degree,Social worker,Every day,Every day,Advanced (C1),7.0
+6,40,Female,Iraq,Master's degree,Lecturer,A few times a week,Every day,Advanced (C1),6.6
+7,38,Female,Iraq,Master's degree,Interpreter,A few times a week,A few times a week,Advanced (C1),7.0
+8,37,Male,Iraq,Bachelor's degree,.,A few times a month,Every day,Upper-Intermediate (B2),3.0
