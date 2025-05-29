@@ -13,7 +13,7 @@ jobs:
           git config --global user.email "action@github.com"
           # Find files with colons and rename them (replace : with _)
           find . -type f -name '*:*' | while read -r file; do
-            newfile=$(echo "$file" | sed 's/:/_/g')
+            newfile=$(echo "$file" | sed 's/:/-/g')
             git mv "$file" "$newfile"
           done
       - name: Commit changes
