@@ -1,0 +1,21 @@
+[
+  {
+    "design": "dark",
+    "width": 379.3958435058594,
+    "height": 188.2604217529297,
+    "top": 505.8645935058594,
+    "right": 1149.6979675292969,
+    "bottom": 694.1250152587891,
+    "left": 770.3021240234375,
+    "description": "popup"
+  },
+  {
+    "width": 322,
+    "height": 250,
+    "top": 0,
+    "right": 362,
+    "bottom": 250,
+    "left": 40,
+    "description": "prompt"
+  }
+]

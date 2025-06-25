@@ -10,8 +10,8 @@ import neurokit2 as nk
 import seaborn as sns
 
 
-def g(subject, glob_pattern="*"):
-    return glob.glob(f"data/{subject}/{glob_pattern}")
+def m(subject, glob_pattern="*"):
+    return glob.glob(f"data/main/{subject}/{glob_pattern}")
 
 
 # Helper function to get a color from the Plotly color palette
