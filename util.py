@@ -1,17 +1,74 @@
-import glob
-
+import seaborn as sns
+import gzip
+import json
+import re
+import shutil
 import numpy as np
 import pandas as pd
-import plotly.graph_objs as go
-import plotly.offline as pyo
-import plotly.express as px
-from matplotlib import pyplot as plt
 import neurokit2 as nk
-import seaborn as sns
+import plotly.io as pio
+import plotly.express as px
+from _plotly_utils.colors import n_colors
+from matplotlib import pyplot as plt
+import plotly.graph_objs as go
+import warnings
+from glob import glob
+from operator import itemgetter
+import os
+from os.path import isfile
+# from util import plot_data, plot_channels, plot_gantt, markers_to_gantt, plot_epoch, plot_correlation_matrix, \
+#     seconds_to_samples, samples_to_seconds, m
+from template_matching import process_video_template
+from IPython.display import display
+from pathlib import Path
+import ipywidgets as widgets
+from IPython.display import display
+from io import BytesIO
+from dominate.tags import div, img
+from IPython.display import display, HTML
+from IPython.display import Image, display
+import base64
+from dominate.tags import table, tr, td
+
+warnings.filterwarnings('ignore', message='FigureCanvasAgg is non-interactive')
+warnings.filterwarnings("ignore", message="More than 20 figures have been opened")
+warnings.simplefilter('ignore', category=pd.errors.DtypeWarning)
+
+# pio.renderers.default = 'notebook_connected+jupyterlab'
+pio.renderers.default = 'png'
+# pio.renderers.default = "plotly_mimetype"
+# pio.renderers.default = "plotly_mimetype+png"
+# pio.renderers.default = "browser"
+# pio.kaleido.scope.default_engine = "kaleido"
+
+FORCE_CREATE_V = 2
+V2_OUTPUT_DIR = "data_v2"
+V3_OUTPUT_DIR = "data_v3"
+CSV_NAMES = ['non_epoch_features', 'epoch_features', 'epoch_signals',
+             'counterbalancing', 'demographics', 'questionnaire', 'decisions']
+TSV_NAMES = ['fixation_data', 'fixation_metrics_event-based', 'fixation_metrics_interval-based']
+
+# File path mappings
+V2_CSV_FILES = {name: f"{V2_OUTPUT_DIR}/{name}.csv" for name in CSV_NAMES}
+V2_TSV_FILES = {name: f"{V2_OUTPUT_DIR}/{name}.tsv" for name in TSV_NAMES}
+V3_FILES = {name: f"{V3_OUTPUT_DIR}/{name}.parquet" for name in CSV_NAMES}
+
+counterbalancing_df, fixation_df, fixation_event_df, fixation_interval_df = None, None, None, None
+
+sampling_rate = 1000
+epoch_start = -1  # Start of the epoch in seconds
+epoch_end = 8  # End of the epoch in seconds
+epoch_index = pd.Index(np.arange(epoch_start, epoch_end, 1 / sampling_rate).tolist(), dtype=float)
+epoch_index.name = None
+
+sites = ("hotels", "flights")
+stimuli = ("cookies", "geolocation", "notification", "travelProtection", "newsletter")
+static_coords = {s: pd.read_json(f"static_coords/{s}.json") for s in stimuli}
+
 
 
 def m(subject, glob_pattern="*"):
-    return glob.glob(f"data/main/{subject}/{glob_pattern}")
+    return glob(f"data/main/{subject}/{glob_pattern}")
 
 
 # Helper function to get a color from the Plotly color palette
@@ -21,7 +78,7 @@ def get_color(i):
 
 
 def markers_to_gantt(markers_df):
-    marker_prefixes = markers_df.marker.str.split("/").str[0:2].apply("/".join).unique()
+    marker_prefixes = markers_df.marker.str.split("/").str[0:3].apply("/".join).unique()
 
     def get_index(marker_prefix, marker_suffix):
         matches = markers_df.loc[

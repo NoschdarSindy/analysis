@@ -1,5 +1,25 @@
 [
   {
+    "site": "hotels",
+    "design": "fair",
+    "width": 75.78125,
+    "height": 32,
+    "top": 415.5,
+    "right": 751.765625,
+    "bottom": 447.5,
+    "left": 675.984375
+  },
+  {
+    "site": "flights",
+    "design": "fair",
+    "width": 75.671875,
+    "height": 32,
+    "top": 408,
+    "right": 674.234375,
+    "bottom": 440,
+    "left": 598.5625
+  },
+  {
     "design": "dark",
     "width": 379.3958435058594,
     "height": 188.2604217529297,
