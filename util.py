@@ -60,6 +60,8 @@ epoch_start = -1  # Start of the epoch in seconds
 epoch_end = 8  # End of the epoch in seconds
 epoch_index = pd.Index(np.arange(epoch_start, epoch_end, 1 / sampling_rate).tolist(), dtype=float)
 epoch_index.name = None
+eda_latency = 1.5 # expected latency in seconds for EDA signals to reflect participant's arousal
+feature_window_cutoff = 15 # cutoff for feature extraction window in seconds
 
 sites = ("hotels", "flights")
 stimuli = ("cookies", "geolocation", "notification", "travelProtection", "newsletter")

@@ -1,0 +1,377 @@
+---
+title: "EDA Analysis"
+format:
+  html:
+    self-contained: true
+    toc: true
+    toc-expand: true
+    code-tools: true
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(purrr)
+library(lme4)
+library(lmerTest)
+library(glmnet)
+library(pROC)
+library(performance)
+library(rstatix)
+library(car)
+library(broom)
+library(parallel)
+library(doParallel)
+library(knitr)
+library(kableExtra)
+library(corrr)
+
+set.seed(123)
+options(scipen = 999, digits = 4)
+knitr::opts_chunk$set(echo = TRUE)
+
+load_features <- function(path = "features.csv", drop_outliers = TRUE) {
+  df <- read.csv(path)
+  
+  if (drop_outliers) {
+    # Tukeys IQR Rule
+    q1 <- quantile(df$eda_tonic_mean, 0.25)
+    q3 <- quantile(df$eda_tonic_mean, 0.75)
+    iqr <- q3 - q1
+    lower <- q1 - 1.5 * iqr
+    upper <- q3 + 1.5 * iqr
+    
+    # Identify outlier subjects (any with values outside bounds)
+    outlier_subjects <- unique(df$subject[df$eda_tonic_mean < lower | df$eda_tonic_mean > upper])
+    
+    # Drop full subjects if any of their rows are outliers
+    df_clean <- df[!df$subject %in% outlier_subjects, ]
+    
+    # Subjects that were dropped entirely
+    dropped_subjects <- setdiff(unique(df$subject), unique(df_clean$subject))
+    
+    print(message <- paste("Dropped subjects:", paste(as.integer(dropped_subjects), collapse = ", ")))
+    
+    # Normalize tonic EDA per subject
+    df <- df_clean
+    
+    df <- df |>
+      group_by(subject) |>
+      mutate(
+        across(contains("eda_tonic"), ~ scale(.x)[,1])
+      ) |>
+      ungroup()
+  }
+  
+  eda_vars <<- df |> 
+    select(contains(c("eda", "scr"))) |> 
+    names()
+  
+  return(df)
+}
+```
+
+## Boxplot Analysis
+
+```{r}
+df_with_outliers <- load_features(drop_outliers = FALSE)
+```
+
+### EDA by Design (Fair vs Dark)
+
+```{r}
+#| fig-width: 8
+#| fig-height: 6
+
+ggplot(df_with_outliers, aes(x = factor(dark), y = eda_tonic_mean)) +
+  geom_boxplot() +
+  labs(
+    title = "Tonic EDA by Design (Fair vs Dark)",
+    x = "Dark Pattern (0 = Fair, 1 = Dark)",
+    y = "EDA Tonic Mean"
+  ) +
+  theme_minimal()
+```
+
+### EDA by Awareness
+
+```{r}
+#| fig-width: 8
+#| fig-height: 6
+
+ggplot(df_with_outliers, aes(x = factor(aware), y = eda_tonic_mean)) +
+  geom_boxplot() +
+  labs(
+    title = "Tonic EDA by Awareness",
+    x = "Aware (0 = No, 1 = Yes)",
+    y = "EDA Tonic Mean"
+  ) +
+  theme_minimal()
+```
+
+### EDA by Bothered Group
+
+```{r}
+#| fig-width: 8
+#| fig-height: 6
+
+# Create bothered group variable
+df_with_outliers$bothered_group <- as.integer(df_with_outliers$bothered > mean(df_with_outliers$bothered))
+
+ggplot(df_with_outliers, aes(x = factor(bothered_group), y = eda_tonic_mean)) +
+  geom_boxplot() +
+  labs(
+    title = "Tonic EDA by Bothered Group",
+    x = "(0 = Less Bothered, 1 = More Bothered)",
+    y = "EDA Tonic Mean"
+  ) +
+  theme_minimal()
+```
+
+### EDA by Condition Type
+
+```{r}
+#| fig-width: 10
+#| fig-height: 6
+
+ggplot(df_with_outliers, aes(x = condition_type, y = eda_tonic_mean)) +
+  geom_boxplot() +
+  labs(
+    title = "Tonic EDA by Condition Type (Stimulus × Design)",
+    x = "Stimulus",
+    y = "EDA Tonic Mean"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Drop outliers for further analysis (Tukey Method):
+
+```{r}
+df <- load_features(drop_outliers = TRUE)
+```
+
+## Two-way ANOVA
+
+```{r}
+anova_out <- aov(eda_tonic_mean ~ dark * stimulus, data = df)
+kable(tidy(anova_out), caption = "ANOVA: eda_tonic_mean ~ dark * stimulus")
+```
+
+### Assumptions for ANOVA
+
+**Levene's Test**:
+
+```{r}
+levene_out <- leveneTest(eda_tonic_mean ~ interaction(dark, stimulus), data = df)
+kable(levene_out, caption = "Levene's Test for Homogeneity of Variance")
+```
+
+**Shapiro-Wilk Test**:
+
+```{r}
+shapiro_out <- shapiro.test(residuals(anova_out))
+kable(tidy(shapiro_out))
+```
+
+## Friedman Test
+
+```{r}
+map_dfr(eda_vars, \(var) {
+  # Prepare data
+  df_friedman <- df |> 
+    select(subject, condition_type, !!sym(var)) |> 
+    arrange(subject, condition_type)
+  
+  # Friedman test
+  friedman_res <- friedman_test(
+    as.formula(paste(var, "~ condition_type | subject")),
+    data = df_friedman
+  )
+  
+  # Effect size (Kendall's W)
+  effsize_res <- friedman_effsize(
+    as.formula(paste(var, "~ condition_type | subject")),
+    data = df_friedman
+  )
+  
+  # Combine results
+  tibble(
+    Variable = var,
+    `Test Statistic` = friedman_res$statistic,
+    `df` = friedman_res$df,
+    `P-value` = format.pval(friedman_res$p, digits = 3),
+    `Kendall's W` = effsize_res$effsize,
+    `Effect Size Magnitude` = effsize_res$magnitude
+  )
+}) |>
+  kable(caption = "Friedman Tests and Effect Sizes across condition_type")
+```
+
+## Paired Wilcoxon Tests
+
+```{r}
+df_wide <- df |>
+  group_by(subject, dark) |>
+  summarise(across(all_of(eda_vars), ~ mean(.x, na.rm = TRUE)), .groups = "drop") |>
+  pivot_wider(names_from = dark, values_from = all_of(eda_vars), names_sep = "_") |>
+  drop_na()
+
+map_dfr(eda_vars, \(var) {
+  x <- df_wide[[paste0(var, "_0")]]
+  y <- df_wide[[paste0(var, "_1")]]
+  w <- suppressWarnings(wilcox.test(x, y, paired = TRUE, exact = FALSE))
+  z <- qnorm(w$p.value / 2, lower.tail = FALSE) * sign(median(y - x, na.rm = TRUE))
+  r <- z / sqrt(length(x))
+  tibble(
+    Variable = var,
+    P = signif(w$p.value, 3),
+    r = round(r, 3),
+    Interpretation = case_when(
+      abs(r) < 0.1 ~ "negligible",
+      abs(r) < 0.3 ~ "small",
+      abs(r) < 0.5 ~ "medium",
+      TRUE ~ "large"
+    ),
+    Median_Diff = median(y - x, na.rm = TRUE)
+  )
+}) |>
+  kable(digits = 3, caption = "Paired Wilcoxon Tests with Effect Sizes for dark") |>
+  kable_styling(bootstrap_options = "striped")
+```
+
+## Logistic Regression
+
+```{r}
+check_separation <- function(df, response_var, predictors) {
+  temp <- df |>
+      select(all_of(c(response_var, predictors)))
+  df_check <- temp[complete.cases(temp), ]
+  
+  # Check each predictor for perfect separation
+  separation_issues <- map_dfr(predictors, function(pred) {
+    if (is.numeric(df_check[[pred]])) {
+      # For continuous variables, check if all 1s are above all 0s or vice versa
+      response_0 <- df_check[[pred]][df_check[[response_var]] == 0]
+      response_1 <- df_check[[pred]][df_check[[response_var]] == 1]
+      
+      if (length(response_0) > 0 & length(response_1) > 0) {
+        separated <- max(response_0, na.rm = TRUE) < min(response_1, na.rm = TRUE) | 
+                    max(response_1, na.rm = TRUE) < min(response_0, na.rm = TRUE)
+      } else {
+        separated <- TRUE  # One group is empty
+      }
+    } else {
+      # For categorical, check if any category predicts perfectly
+      tab <- table(df_check[[pred]], df_check[[response_var]])
+      separated <- any(rowSums(tab == 0) == ncol(tab) - 1)
+    }
+    
+    tibble(predictor = pred, perfect_separation = separated)
+  })
+  
+  problematic <- filter(separation_issues, perfect_separation)
+  if (nrow(problematic) > 0) {
+    cat("Warning: Perfect separation detected for:", paste(problematic$predictor, collapse = ", "), "\n")
+    cat("Consider removing these predictors or using penalized regression\n")
+  }
+}
+
+run_logistic <- function(df_in, response_var) {
+  # Helper: prune highly correlated predictors (|r| > 0.9)
+  prune_by_corr <- function(dat, vars, cutoff = 0.9) {
+    x <- dat |> dplyr::select(dplyr::all_of(vars)) %>% dplyr::filter(stats::complete.cases(.))
+    if (ncol(x) <= 1) return(vars)
+    cm <- stats::cor(x)
+    to_drop <- character(0)
+    for (i in seq_len(ncol(cm) - 1)) {
+      if (colnames(cm)[i] %in% to_drop) next
+      high <- colnames(cm)[(i + 1):ncol(cm)][abs(cm[(i + 1):ncol(cm), i]) > cutoff]
+      to_drop <- union(to_drop, high)
+    }
+    setdiff(vars, to_drop)
+  }
+
+  # Prepare data
+  df_filtered <- if (response_var == "granted") {
+    filter(df_in, !(stimulus %in% c("cookies", "newsletter") & dark == 1))
+  } else {
+    filter(df_in, (was_fixated == 1))
+  }
+
+  # Prune collinear EDA predictors based on df_filtered
+  eda_vars_pruned <- prune_by_corr(df_filtered, eda_vars, cutoff = 0.9)
+
+  df_pred_complete <- df_filtered |>
+    select(subject, all_of(c(response_var, eda_vars_pruned))) |>
+    mutate(!!sym(response_var) := as.factor(!!sym(response_var))) |>
+    filter(if_all(everything(), ~ !is.na(.)))
+
+  # Summary
+  participant_ids <- unique(df_pred_complete$subject)
+  cat("\n---", response_var, "---\n")
+  cat("Observations:", nrow(df_pred_complete),
+      "| Participants:", length(participant_ids),
+      "| Predictors:", length(eda_vars_pruned), "\n")
+
+  # LOSO Cross-Validation
+  loso_results <- map_dfr(participant_ids, function(test_subject) {
+    train_data <- filter(df_pred_complete, subject != test_subject)
+    test_data  <- filter(df_pred_complete, subject == test_subject)
+
+    model <- glm(paste(response_var, "~ ."),
+                 data   = select(train_data, all_of(c(response_var, eda_vars_pruned))),
+                 family = binomial,
+                 control = glm.control(maxit = 100))
+    pred_prob <- predict(model, newdata = test_data, type = "response")
+    actual <- as.numeric(as.character(test_data[[response_var]]))
+
+    list(
+      accuracy = mean((pred_prob > 0.5) == actual, na.rm = TRUE),
+      auc = if (length(unique(actual)) > 1)
+              as.numeric(auc(roc(actual, pred_prob, quiet = TRUE)))
+            else NA_real_
+    )
+  }) |> bind_rows()
+
+  # Results
+  valid_results <- filter(loso_results, !is.na(accuracy))
+  cat("LOSO Accuracy =", round(mean(valid_results$accuracy), 3), "±",
+      round(sd(valid_results$accuracy), 3),
+      "| AUC =", round(mean(valid_results$auc, na.rm = TRUE), 3), "±",
+      round(sd(valid_results$auc, na.rm = TRUE), 3), "\n")
+
+  # Final model
+  model_data <- select(df_pred_complete, all_of(c(response_var, eda_vars_pruned)))
+  check_separation(model_data, response_var, eda_vars_pruned)
+  final_model <- glm(paste(response_var, "~ ."),
+                     data   = model_data,
+                     family = binomial,
+                     control = glm.control(maxit = 100))
+
+  all_coefs <- tidy(final_model) |>
+    filter(term != "(Intercept)") |>
+    arrange(p.value)
+
+  sig_coefs <- filter(all_coefs, p.value < 0.05)
+
+  if (nrow(sig_coefs) > 0) {
+    cat("Found", nrow(sig_coefs), "significant coefficients\n")
+    return(kable(sig_coefs, digits = 4, caption = paste("Significant Coefficients -", response_var)) |>
+             kable_styling(bootstrap_options = "striped"))
+  } else {
+    cat("No significant coefficients (p < 0.05)\n")
+    return(kable(head(all_coefs, 5), digits = 4, caption = paste("Top Coefficients -", response_var)) |>
+             kable_styling(bootstrap_options = "striped"))
+  }
+}
+
+```
+
+```{r}
+run_logistic(df, "aware")
+run_logistic(df, "granted")
+```
